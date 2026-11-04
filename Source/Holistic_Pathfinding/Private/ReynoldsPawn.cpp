@@ -30,6 +30,7 @@
 #include "FlockingSteeringBehavior.h"
 
 #include "Runtime/Engine/Classes/Engine/Engine.h"
+#include "GameFramework/Controller.h"
 
 FName AReynoldsPawn::FloatingPawnMovementComponentName(TEXT("MoveComp"));
 
@@ -167,4 +168,56 @@ void AReynoldsPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+}
+
+// "SeekTrainAIController_C" becomes "Seek Train".
+static FString BehaviorDisplayName(const AController& Controller)
+{
+	FString Name = Controller.GetClass()->GetName();
+	Name.RemoveFromEnd(TEXT("_C"));
+	Name.RemoveFromEnd(TEXT("AIController"));
+	return FName::NameToDisplayString(Name, false);
+}
+
+// Non-negative so it never collides with INDEX_NONE, which the engine treats as an unkeyed message.
+static int32 BehaviorMessageKey(const FString& DisplayName)
+{
+	return static_cast<int32>(GetTypeHash(DisplayName) & 0x7FFFFFFFu);
+}
+
+// Boids on each behavior, by message key. Returns to empty when a Play session ends: APawn::EndPlay unpossesses
+// every pawn, and that reaches NotifyControllerChanged below.
+static TMap<int32, int32> BoidsPerBehavior;
+
+void AReynoldsPawn::NotifyControllerChanged()
+{
+	// Read before Super: APawn::NotifyControllerChanged ends by setting PreviousController to the current controller.
+	AController* const Previous = PreviousController;
+	Super::NotifyControllerChanged();
+
+	if (!GEngine)
+	{
+		return;
+	}
+
+	// A behavior's line stays while any boid runs it, whatever order the boids switch in.
+	if (Previous)
+	{
+		const int32 Key = BehaviorMessageKey(BehaviorDisplayName(*Previous));
+		int32& Count = BoidsPerBehavior.FindOrAdd(Key);
+		if (--Count <= 0)
+		{
+			BoidsPerBehavior.Remove(Key);
+			GEngine->RemoveOnScreenDebugMessage(static_cast<uint64>(Key));
+		}
+	}
+	if (const AController* Current = GetController())
+	{
+		const FString DisplayName = BehaviorDisplayName(*Current);
+		const int32 Key = BehaviorMessageKey(DisplayName);
+		if (++BoidsPerBehavior.FindOrAdd(Key) == 1)
+		{
+			GEngine->AddOnScreenDebugMessage(Key, 1.0e9f, FColor::White, DisplayName);
+		}
+	}
 }

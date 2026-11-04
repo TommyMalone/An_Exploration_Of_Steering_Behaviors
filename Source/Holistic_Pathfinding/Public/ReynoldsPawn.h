@@ -73,6 +73,9 @@ public:
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
+	// Keeps one on-screen line per AI controller class in use, each controller being one demo behavior. A line stays while any boid runs that behavior.
+	virtual void NotifyControllerChanged() override;
+
 	
 	
 };
